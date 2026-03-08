@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLIP Aesthetic Validator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  /* ── Header / Scoreboard ─────────────────── */
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid #2a2a3a;
+    background: #12121a;
+    flex-shrink: 0;
+  }
+
+  #header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  #header h1 span {
+    font-weight: 400;
+    color: #888;
+    font-size: 13px;
+    margin-left: 8px;
+  }
+
+  #scoreboard {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 14px;
+  }
+
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .stat-label {
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-value {
+    color: #fff;
+    font-weight: 600;
+    font-size: 18px;
+  }
+
+  .stat-value.agreement {
+    color: #4aff8a;
+  }
+
+  #header-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  button {
+    background: #1a1a2a;
+    color: #e0e0e0;
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  button:hover {
+    background: #2a2a3a;
+    border-color: #4a6aff;
+  }
+
+  button:active {
+    background: #3a3a4a;
+  }
+
+  button.primary {
+    background: #4a6aff;
+    border-color: #4a6aff;
+    color: #fff;
+  }
+
+  button.primary:hover {
+    background: #5a7aff;
+  }
+
+  button.danger {
+    border-color: #ff4a4a;
+    color: #ff6a6a;
+  }
+
+  button.danger:hover {
+    background: #2a1a1a;
+  }
+
+  /* ── Main comparison area ────────────────── */
+  #comparison {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    padding: 24px;
+    min-height: 0;
+  }
+
+  .image-card {
+    flex: 1;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    border: 3px solid transparent;
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  }
+
+  .image-card:hover {
+    border-color: #4a6aff;
+    background: rgba(74, 106, 255, 0.05);
+    transform: scale(1.02);
+  }
+
+  .image-card img {
+    width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #1a1a2a;
+    image-rendering: auto;
+  }
+
+  .image-card .shortcut {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #666;
+  }
+
+  .image-card .shortcut kbd {
+    background: #1a1a2a;
+    border: 1px solid #2a2a3a;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: inherit;
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  .divider {
+    width: 1px;
+    height: 200px;
+    background: #2a2a3a;
+    flex-shrink: 0;
+  }
+
+  /* ── Footer ──────────────────────────────── */
+  #footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px 24px;
+    border-top: 1px solid #2a2a3a;
+    background: #12121a;
+    flex-shrink: 0;
+  }
+
+  #footer .prompt {
+    font-size: 16px;
+    color: #ccc;
+  }
+
+  /* ── Loading / Error ─────────────────────── */
+  #loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-size: 16px;
+    color: #888;
+  }
+
+  /* ── Results overlay ─────────────────────── */
+  #results-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #results-overlay.visible {
+    display: flex;
+  }
+
+  #results-card {
+    background: #12121a;
+    border: 1px solid #2a2a3a;
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 480px;
+    width: 90%;
+    text-align: center;
+  }
+
+  #results-card h2 {
+    font-size: 20px;
+    margin-bottom: 20px;
+    color: #fff;
+  }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #1a1a2a;
+    font-size: 14px;
+  }
+
+  .result-row .label { color: #888; }
+  .result-row .value { color: #fff; font-weight: 600; }
+
+  #results-card .buttons {
+    margin-top: 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  /* ── Flash feedback ──────────────────────── */
+  .flash-correct {
+    animation: flashGreen 0.4s ease-out;
+  }
+
+  .flash-incorrect {
+    animation: flashRed 0.4s ease-out;
+  }
+
+  @keyframes flashGreen {
+    0% { border-color: #4aff8a; background: rgba(74, 255, 138, 0.15); }
+    100% { border-color: transparent; background: transparent; }
+  }
+
+  @keyframes flashRed {
+    0% { border-color: #ff4a4a; background: rgba(255, 74, 74, 0.15); }
+    100% { border-color: transparent; background: transparent; }
+  }
+
+  /* ── Progress bar ────────────────────────── */
+  #progress-bar {
+    height: 3px;
+    background: #1a1a2a;
+    flex-shrink: 0;
+  }
+
+  #progress-fill {
+    height: 100%;
+    background: #4a6aff;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">Loading data.json...</div>
+
+<div id="main" style="display:none">
+  <div id="header">
+    <h1>CLIP Aesthetic Validator <span>Pairwise Comparison</span></h1>
+    <div id="scoreboard">
+      <div class="stat">
+        <span class="stat-label">Round</span>
+        <span class="stat-value" id="round-count">0/0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Agreement</span>
+        <span class="stat-value agreement" id="agreement-pct">—</span>
+      </div>
+    </div>
+    <div id="header-buttons">
+      <button id="btn-export" title="Export results as JSON">Export</button>
+      <button id="btn-reset" class="danger" title="Reset all progress">Reset</button>
+    </div>
+  </div>
+
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+
+  <div id="comparison">
+    <div class="image-card" id="card-left" tabindex="0">
+      <img id="img-left" alt="Image A">
+      <div class="shortcut">Click or press <kbd>&larr;</kbd></div>
+    </div>
+    <div class="divider"></div>
+    <div class="image-card" id="card-right" tabindex="0">
+      <img id="img-right" alt="Image B">
+      <div class="shortcut">Click or press <kbd>&rarr;</kbd></div>
+    </div>
+  </div>
+
+  <div id="footer">
+    <span class="prompt">Which image is more beautiful?</span>
+    <button id="btn-skip">Skip (Space)</button>
+    <button id="btn-finish" class="primary">Finish early</button>
+  </div>
+</div>
+
+<!-- Results overlay -->
+<div id="results-overlay">
+  <div id="results-card">
+    <h2>Results</h2>
+    <div id="results-body"></div>
+    <div class="buttons">
+      <button id="btn-export-final" class="primary">Export JSON</button>
+      <button id="btn-close-results">Close</button>
+      <button id="btn-restart">Start Over</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────
+const STORAGE_KEY = "clip-compare-state";
+const PERCENTILE = 0.05; // top/bottom 5%
+
+let allImages = [];
+let topPool = [];
+let bottomPool = [];
+let pairs = [];      // pre-shuffled pair indices
+let comparisons = []; // results
+let currentIdx = 0;
+let currentPair = null; // {topImg, bottomImg, leftIsTop}
+
+// ── DOM refs ──────────────────────────────────────────────────────────
+const $loading = document.getElementById("loading");
+const $main = document.getElementById("main");
+const $roundCount = document.getElementById("round-count");
+const $agreementPct = document.getElementById("agreement-pct");
+const $progressFill = document.getElementById("progress-fill");
+const $imgLeft = document.getElementById("img-left");
+const $imgRight = document.getElementById("img-right");
+const $cardLeft = document.getElementById("card-left");
+const $cardRight = document.getElementById("card-right");
+const $resultsOverlay = document.getElementById("results-overlay");
+const $resultsBody = document.getElementById("results-body");
+
+// ── Load data ─────────────────────────────────────────────────────────
+fetch("output/data.json")
+  .then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  })
+  .then(data => {
+    allImages = data.images.filter(img => img.thumb && img.aesthetic != null);
+    if (allImages.length < 20) {
+      throw new Error(`Need at least 20 scored images, found ${allImages.length}`);
+    }
+    init();
+  })
+  .catch(e => {
+    $loading.textContent =
+      `Error: ${e.message}\n\nMake sure you've run embed.py and are serving via:\n  python -m http.server 8080`;
+    $loading.style.whiteSpace = "pre-wrap";
+  });
+
+// ── Initialization ────────────────────────────────────────────────────
+function init() {
+  // Sort by aesthetic score
+  const sorted = [...allImages].sort((a, b) => a.aesthetic - b.aesthetic);
+  const cutoff = Math.max(1, Math.ceil(sorted.length * PERCENTILE));
+
+  bottomPool = sorted.slice(0, cutoff);
+  topPool = sorted.slice(sorted.length - cutoff);
+
+  // Try to restore saved state — fingerprint ensures pools match the same dataset
+  const fingerprint = datasetFingerprint();
+  const saved = loadState();
+  if (saved && saved.fingerprint === fingerprint) {
+    pairs = saved.pairs;
+    comparisons = saved.comparisons;
+    currentIdx = saved.currentIdx;
+  } else {
+    // Generate all pairs: each round pairs one random top with one random bottom
+    // We generate min(topPool, bottomPool) pairs, each image used at most once
+    generatePairs();
+    comparisons = [];
+    currentIdx = 0;
+  }
+
+  $loading.style.display = "none";
+  $main.style.display = "flex";
+  $main.style.flexDirection = "column";
+  $main.style.height = "100vh";
+
+  updateScoreboard();
+  showCurrentPair();
+  bindEvents();
+}
+
+function generatePairs() {
+  // Shuffle both pools independently, then zip them
+  const topShuffled = shuffle([...Array(topPool.length).keys()]);
+  const bottomShuffled = shuffle([...Array(bottomPool.length).keys()]);
+  const count = Math.min(topShuffled.length, bottomShuffled.length);
+
+  pairs = [];
+  for (let i = 0; i < count; i++) {
+    pairs.push({
+      topIdx: topShuffled[i],
+      bottomIdx: bottomShuffled[i],
+      leftIsTop: Math.random() < 0.5 // randomize placement
+    });
+  }
+}
+
+// ── Display ───────────────────────────────────────────────────────────
+function showCurrentPair() {
+  if (currentIdx >= pairs.length) {
+    showResults();
+    return;
+  }
+
+  const pair = pairs[currentIdx];
+  const topImg = topPool[pair.topIdx];
+  const bottomImg = bottomPool[pair.bottomIdx];
+
+  currentPair = {
+    topImg,
+    bottomImg,
+    leftIsTop: pair.leftIsTop
+  };
+
+  const leftImg = pair.leftIsTop ? topImg : bottomImg;
+  const rightImg = pair.leftIsTop ? bottomImg : topImg;
+
+  $imgLeft.src = `output/${leftImg.thumb}`;
+  $imgRight.src = `output/${rightImg.thumb}`;
+  $imgLeft.alt = leftImg.filename;
+  $imgRight.alt = rightImg.filename;
+}
+
+function updateScoreboard() {
+  const total = pairs.length;
+  const done = comparisons.length;
+  const agreed = comparisons.filter(c => c.humanPickedTop).length;
+  const pct = done > 0 ? Math.round((agreed / done) * 100) : 0;
+
+  $roundCount.textContent = `${done}/${total}`;
+  $agreementPct.textContent = done > 0 ? `${pct}%` : "—";
+  $agreementPct.style.color = done > 0
+    ? (pct >= 60 ? "#4aff8a" : pct >= 40 ? "#ffaa4a" : "#ff4a4a")
+    : "#888";
+  $progressFill.style.width = `${(done / total) * 100}%`;
+}
+
+// ── User actions ──────────────────────────────────────────────────────
+function pickLeft() {
+  if (!currentPair) return;
+  recordChoice("left");
+}
+
+function pickRight() {
+  if (!currentPair) return;
+  recordChoice("right");
+}
+
+function skip() {
+  if (!currentPair) return;
+  currentIdx++;
+  saveState();
+  showCurrentPair();
+}
+
+function recordChoice(side) {
+  const pair = currentPair;
+  const humanPickedTop = (side === "left") === pair.leftIsTop;
+
+  const card = side === "left" ? $cardLeft : $cardRight;
+  card.classList.remove("flash-correct", "flash-incorrect");
+  void card.offsetWidth; // force reflow
+  card.classList.add(humanPickedTop ? "flash-correct" : "flash-incorrect");
+
+  comparisons.push({
+    round: comparisons.length + 1,
+    topFile: pair.topImg.filename,
+    bottomFile: pair.bottomImg.filename,
+    topScore: pair.topImg.aesthetic,
+    bottomScore: pair.bottomImg.aesthetic,
+    leftIsTop: pair.leftIsTop,
+    humanPickedSide: side,
+    humanPickedTop
+  });
+
+  currentIdx++;
+  updateScoreboard();
+  saveState();
+
+  // Brief delay before showing next pair so flash animation is visible
+  setTimeout(() => showCurrentPair(), 200);
+}
+
+// ── Results ───────────────────────────────────────────────────────────
+function showResults() {
+  const done = comparisons.length;
+  const agreed = comparisons.filter(c => c.humanPickedTop).length;
+  const pct = done > 0 ? Math.round((agreed / done) * 100) : 0;
+  const skipped = currentIdx - done;
+
+  $resultsBody.innerHTML = `
+    <div class="result-row">
+      <span class="label">Comparisons made</span>
+      <span class="value">${done}</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Skipped</span>
+      <span class="value">${skipped}</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Human picked top-5%</span>
+      <span class="value">${agreed}</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Human picked bottom-5%</span>
+      <span class="value">${done - agreed}</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Agreement rate</span>
+      <span class="value" style="color: ${pct >= 60 ? '#4aff8a' : pct >= 40 ? '#ffaa4a' : '#ff4a4a'}">${pct}%</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Pool sizes</span>
+      <span class="value">${topPool.length} top / ${bottomPool.length} bottom</span>
+    </div>
+  `;
+
+  $resultsOverlay.classList.add("visible");
+}
+
+// ── Export ─────────────────────────────────────────────────────────────
+function exportResults() {
+  const done = comparisons.length;
+  const agreed = comparisons.filter(c => c.humanPickedTop).length;
+
+  const result = {
+    meta: {
+      totalImages: allImages.length,
+      percentile: PERCENTILE,
+      topPoolSize: topPool.length,
+      bottomPoolSize: bottomPool.length,
+      timestamp: new Date().toISOString()
+    },
+    summary: {
+      comparisons: done,
+      agreed,
+      disagreed: done - agreed,
+      agreementRate: done > 0 ? +(agreed / done).toFixed(4) : null,
+      skipped: currentIdx - done
+    },
+    comparisons
+  };
+
+  const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `clip-comparison-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Persistence ───────────────────────────────────────────────────────
+function datasetFingerprint() {
+  // Hash based on pool filenames + scores — detects any dataset change
+  const top5 = topPool.slice(0, 5).map(i => i.filename + i.aesthetic).join("|");
+  const bot5 = bottomPool.slice(0, 5).map(i => i.filename + i.aesthetic).join("|");
+  return `${topPool.length}:${bottomPool.length}:${top5}:${bot5}`;
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      pairs,
+      comparisons,
+      currentIdx,
+      fingerprint: datasetFingerprint()
+    }));
+  } catch (e) {
+    // localStorage full or unavailable — silently continue
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function resetState() {
+  localStorage.removeItem(STORAGE_KEY);
+  generatePairs();
+  comparisons = [];
+  currentIdx = 0;
+  updateScoreboard();
+  showCurrentPair();
+  $resultsOverlay.classList.remove("visible");
+}
+
+// ── Events ────────────────────────────────────────────────────────────
+function bindEvents() {
+  $cardLeft.addEventListener("click", pickLeft);
+  $cardRight.addEventListener("click", pickRight);
+
+  document.getElementById("btn-skip").addEventListener("click", skip);
+  document.getElementById("btn-finish").addEventListener("click", showResults);
+  document.getElementById("btn-export").addEventListener("click", exportResults);
+  document.getElementById("btn-export-final").addEventListener("click", exportResults);
+  document.getElementById("btn-close-results").addEventListener("click", () => {
+    $resultsOverlay.classList.remove("visible");
+  });
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    if (confirm("Reset all comparison data? This cannot be undone.")) {
+      resetState();
+    }
+  });
+  document.getElementById("btn-restart").addEventListener("click", () => {
+    if (confirm("Start over with fresh pairs?")) {
+      resetState();
+    }
+  });
+
+  document.addEventListener("keydown", e => {
+    if ($resultsOverlay.classList.contains("visible")) return;
+
+    switch (e.key) {
+      case "ArrowLeft":
+        e.preventDefault();
+        pickLeft();
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        pickRight();
+        break;
+      case " ":
+        e.preventDefault();
+        skip();
+        break;
+    }
+  });
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────
+function shuffle(arr) {
+  // Fisher-Yates
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+</script>
+</body>
+</html>

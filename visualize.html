@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLIP Image Explorer</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  #app {
+    display: flex;
+    height: 100vh;
+  }
+
+  /* ── Sidebar ────────────────────────────────── */
+  #sidebar {
+    width: 280px;
+    background: #12121a;
+    border-right: 1px solid #2a2a3a;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  #sidebar h1 {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 16px;
+    border-bottom: 1px solid #2a2a3a;
+    color: #fff;
+  }
+
+  #sidebar h1 span {
+    font-weight: 400;
+    color: #888;
+    font-size: 13px;
+  }
+
+  .control-group {
+    padding: 12px 16px;
+    border-bottom: 1px solid #1a1a2a;
+  }
+
+  .control-group label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    margin-bottom: 6px;
+  }
+
+  select, input[type=range] {
+    width: 100%;
+    background: #1a1a2a;
+    color: #e0e0e0;
+    border: 1px solid #2a2a3a;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  select:focus, input:focus { outline: none; border-color: #4a6aff; }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    height: 4px;
+    padding: 0;
+    border: none;
+    background: #2a2a3a;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4a6aff;
+    cursor: pointer;
+  }
+
+  .range-value {
+    font-size: 12px;
+    color: #aaa;
+    text-align: right;
+    margin-top: 2px;
+  }
+
+  /* ── Preview panel ──────────────────────────── */
+  #preview {
+    flex: 1;
+    padding: 12px 16px;
+    overflow-y: auto;
+  }
+
+  #preview-image {
+    width: 100%;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: #1a1a2a;
+    min-height: 100px;
+    object-fit: contain;
+  }
+
+  #preview-info {
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  #preview-info .label {
+    color: #888;
+    display: inline-block;
+    width: 90px;
+  }
+
+  #preview-info .value {
+    color: #ccc;
+  }
+
+  .score-bar {
+    display: flex;
+    align-items: center;
+    margin: 2px 0;
+  }
+
+  .score-bar .bar-bg {
+    flex: 1;
+    height: 6px;
+    background: #1a1a2a;
+    border-radius: 3px;
+    margin-left: 6px;
+    overflow: hidden;
+  }
+
+  .score-bar .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+
+  /* ── Stats ──────────────────────────────────── */
+  #stats {
+    padding: 12px 16px;
+    border-top: 1px solid #2a2a3a;
+    font-size: 11px;
+    color: #666;
+  }
+
+  /* ── Canvas area ────────────────────────────── */
+  #canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  svg { width: 100%; height: 100%; }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: #1a1a2a;
+    border: 1px solid #3a3a4a;
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .tooltip img {
+    display: block;
+    border-radius: 4px;
+    width: 160px;
+    height: 160px;
+    object-fit: cover;
+  }
+
+  .tooltip .tt-label {
+    font-size: 11px;
+    color: #aaa;
+    padding: 4px 4px 2px;
+    text-align: center;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Color legend ───────────────────────────── */
+  #legend {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(18, 18, 26, 0.9);
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+
+  #legend-title {
+    margin-bottom: 6px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  #legend-bar {
+    width: 200px;
+    height: 10px;
+    border-radius: 3px;
+  }
+
+  #legend-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    color: #888;
+  }
+
+  /* ── Loading ────────────────────────────────── */
+  #loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0f;
+    z-index: 200;
+    font-size: 16px;
+    color: #888;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">Loading data.json...</div>
+
+<div id="app" style="display:none">
+  <div id="sidebar">
+    <h1>CLIP Explorer <span id="image-count"></span></h1>
+
+    <div class="control-group">
+      <label>Color by</label>
+      <select id="dimension-select"></select>
+    </div>
+
+    <div class="control-group">
+      <label>Point size</label>
+      <input type="range" id="size-slider" min="2" max="20" value="6">
+      <div class="range-value" id="size-value">6</div>
+    </div>
+
+    <div class="control-group">
+      <label>Filter: min score</label>
+      <input type="range" id="filter-slider" min="1" max="10" step="0.5" value="1">
+      <div class="range-value" id="filter-value">1.0 (show all)</div>
+    </div>
+
+    <div class="control-group">
+      <label>Sort by selected dimension</label>
+      <select id="sort-select">
+        <option value="none">No sorting</option>
+        <option value="desc">Highest first</option>
+        <option value="asc">Lowest first</option>
+      </select>
+    </div>
+
+    <div id="preview">
+      <img id="preview-image" src="" alt="Hover over a point">
+      <div id="preview-info">
+        <div style="color:#666; text-align:center;">Hover over a point to preview</div>
+      </div>
+    </div>
+
+    <div id="stats"></div>
+  </div>
+
+  <div id="canvas-container">
+    <svg id="scatter"></svg>
+    <div class="tooltip" id="tooltip">
+      <img id="tt-img" src="">
+      <div class="tt-label" id="tt-label"></div>
+    </div>
+    <div id="legend">
+      <div id="legend-title">aesthetic</div>
+      <canvas id="legend-bar" width="200" height="10"></canvas>
+      <div id="legend-labels"><span>1</span><span>10</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Color scales ──────────────────────────────────────────────────────
+const colorScale = d3.scaleSequential(d3.interpolatePlasma).domain([1, 10]);
+
+function drawLegendBar() {
+  const canvas = document.getElementById("legend-bar");
+  const ctx = canvas.getContext("2d");
+  for (let i = 0; i < 200; i++) {
+    const t = 1 + (9 * i) / 199;
+    ctx.fillStyle = colorScale(t);
+    ctx.fillRect(i, 0, 1, 10);
+  }
+}
+
+// ── Load data ─────────────────────────────────────────────────────────
+fetch("output/data.json")
+  .then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  })
+  .then(init)
+  .catch((e) => {
+    document.getElementById("loading").textContent =
+      `Error loading data.json: ${e.message}\n\nMake sure you're serving from the clip-explorer directory:\n  python -m http.server 8080`;
+  });
+
+function init(data) {
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("app").style.display = "flex";
+  document.getElementById("image-count").textContent = `${data.n_images} images`;
+
+  const images = data.images;
+  const dimensions = data.dimensions;
+  let currentDim = dimensions[0] || "aesthetic";
+
+  // ── Populate dimension selector ───────────────────────────────────
+  const dimSelect = document.getElementById("dimension-select");
+  dimensions.forEach((d) => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d.replace("_", " ");
+    dimSelect.appendChild(opt);
+  });
+
+  // ── SVG setup with zoom ───────────────────────────────────────────
+  const container = document.getElementById("canvas-container");
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const svg = d3.select("#scatter").attr("width", width).attr("height", height);
+
+  const g = svg.append("g");
+
+  // Compute scales from UMAP coordinates
+  const xExtent = d3.extent(images, (d) => d.x);
+  const yExtent = d3.extent(images, (d) => d.y);
+  const pad = 40;
+
+  const xScale = d3
+    .scaleLinear()
+    .domain(xExtent)
+    .range([pad, width - pad]);
+  const yScale = d3
+    .scaleLinear()
+    .domain(yExtent)
+    .range([pad, height - pad]);
+
+  // Zoom behavior
+  const zoom = d3
+    .zoom()
+    .scaleExtent([0.5, 30])
+    .on("zoom", (event) => {
+      g.attr("transform", event.transform);
+    });
+  svg.call(zoom);
+
+  // ── Draw points ───────────────────────────────────────────────────
+  const circles = g
+    .selectAll("circle")
+    .data(images)
+    .join("circle")
+    .attr("cx", (d) => xScale(d.x))
+    .attr("cy", (d) => yScale(d.y))
+    .attr("r", 6)
+    .attr("fill", (d) => colorScale(d[currentDim] || 5))
+    .attr("stroke", "none")
+    .attr("opacity", 0.85)
+    .style("cursor", "pointer");
+
+  // ── Tooltip ───────────────────────────────────────────────────────
+  const tooltip = document.getElementById("tooltip");
+  const ttImg = document.getElementById("tt-img");
+  const ttLabel = document.getElementById("tt-label");
+
+  circles
+    .on("mouseenter", function (event, d) {
+      d3.select(this).attr("stroke", "#fff").attr("stroke-width", 2);
+      if (d.thumb) ttImg.src = "output/" + d.thumb;
+      ttLabel.textContent = `${d.filename} — ${currentDim}: ${(d[currentDim] || 0).toFixed(1)}`;
+      tooltip.style.opacity = 1;
+      updatePreview(d);
+    })
+    .on("mousemove", function (event) {
+      const rect = container.getBoundingClientRect();
+      let x = event.clientX - rect.left + 15;
+      let y = event.clientY - rect.top + 15;
+      // Keep tooltip in viewport
+      if (x + 180 > rect.width) x = event.clientX - rect.left - 180;
+      if (y + 200 > rect.height) y = event.clientY - rect.top - 200;
+      tooltip.style.left = x + "px";
+      tooltip.style.top = y + "px";
+    })
+    .on("mouseleave", function () {
+      d3.select(this).attr("stroke", "none");
+      tooltip.style.opacity = 0;
+    });
+
+  // ── Preview panel ─────────────────────────────────────────────────
+  function updatePreview(d) {
+    const img = document.getElementById("preview-image");
+    if (d.thumb) img.src = "output/" + d.thumb;
+
+    let html = `<div><span class="label">File</span><span class="value">${d.filename}</span></div>`;
+    html += `<div><span class="label">Size</span><span class="value">${d.width}x${d.height} (${d.size_kb}KB)</span></div>`;
+
+    dimensions.forEach((dim) => {
+      const val = d[dim] || 0;
+      const pct = ((val - 1) / 9) * 100;
+      const color = colorScale(val);
+      html += `<div class="score-bar">
+        <span class="label">${dim.replace("_", " ")}</span>
+        <span class="value" style="width:30px">${val.toFixed(1)}</span>
+        <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>`;
+    });
+
+    document.getElementById("preview-info").innerHTML = html;
+  }
+
+  // ── Controls ──────────────────────────────────────────────────────
+  dimSelect.addEventListener("change", () => {
+    currentDim = dimSelect.value;
+    document.getElementById("legend-title").textContent = currentDim.replace("_", " ");
+    updateColors();
+  });
+
+  const sizeSlider = document.getElementById("size-slider");
+  sizeSlider.addEventListener("input", () => {
+    const r = +sizeSlider.value;
+    document.getElementById("size-value").textContent = r;
+    circles.attr("r", r);
+  });
+
+  const filterSlider = document.getElementById("filter-slider");
+  filterSlider.addEventListener("input", () => {
+    const min = +filterSlider.value;
+    document.getElementById("filter-value").textContent =
+      min <= 1 ? "1.0 (show all)" : min.toFixed(1);
+    circles.attr("opacity", (d) => ((d[currentDim] || 0) >= min ? 0.85 : 0.05));
+  });
+
+  const sortSelect = document.getElementById("sort-select");
+  sortSelect.addEventListener("change", () => {
+    const mode = sortSelect.value;
+    if (mode === "none") {
+      circles.sort((a, b) => 0); // restore original order
+    } else if (mode === "desc") {
+      circles.sort((a, b) => (b[currentDim] || 0) - (a[currentDim] || 0));
+    } else {
+      circles.sort((a, b) => (a[currentDim] || 0) - (b[currentDim] || 0));
+    }
+  });
+
+  function updateColors() {
+    circles
+      .transition()
+      .duration(400)
+      .attr("fill", (d) => colorScale(d[currentDim] || 5));
+    // Reset filter
+    filterSlider.value = 1;
+    document.getElementById("filter-value").textContent = "1.0 (show all)";
+    circles.attr("opacity", 0.85);
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────
+  const meanAesthetic =
+    images.reduce((s, d) => s + (d.aesthetic || 0), 0) / images.length;
+  document.getElementById("stats").innerHTML =
+    `${images.length} images | mean aesthetic: ${meanAesthetic.toFixed(1)} | model: ${data.model}`;
+
+  // ── Legend ─────────────────────────────────────────────────────────
+  drawLegendBar();
+}
+</script>
+</body>
+</html>
